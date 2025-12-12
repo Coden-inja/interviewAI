@@ -1,0 +1,8 @@
+{
+  "name": "Interviewer AI",
+  "description": "A real-time voice interview simulator using Gemini Live API. Upload your resume, define the job, and practice with an AI avatar that remembers context and reacts instantly.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
