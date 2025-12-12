@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Briefcase, ArrowRight, Loader2, FileType, Trash2, Database } from 'lucide-react';
-import { InterviewContext } from '../types';
+import { Upload, Briefcase, ArrowRight, Loader2, FileType, Trash2, Database, UserCircle2 } from 'lucide-react';
+import { InterviewContext, AvatarOption } from '../types';
 import { extractResumeText } from '../services/geminiService';
 
 interface SetupFormProps {
@@ -8,23 +8,47 @@ interface SetupFormProps {
   isLoading: boolean;
 }
 
+const AVATARS: AvatarOption[] = [
+  {
+    id: "30fa96d0-26c4-4e55-94a0-517025942e18",
+    name: "Cara",
+    voiceId: "6bfbe25a-979d-40f3-a92b-5394170af54b", // Female voice
+    thumbnailUrl: "https://lab.anam.ai/persona_thumbnails/cara_windowsofacorner.png" // Placeholder or known URL
+  },
+  {
+    id: "121d5df1-3f3e-4a48-a237-8ff488e9eed8",
+    name: "Leo",
+    voiceId: "b7274f87-8b72-4c5b-bf52-954768b28c75", // Male voice
+    thumbnailUrl: "https://lab.anam.ai/persona_thumbnails/leo_windowsofacorner.png"
+  },
+  {
+    id: "a49abb10-9a29-4099-b950-e68534742fb2",
+    name: "Maya",
+    voiceId: "6bfbe25a-979d-40f3-a92b-5394170af54b", // Using same female voice as Cara for now
+    thumbnailUrl: "https://lab.anam.ai/persona_thumbnails/maya_windowsofacorner.png" // Placeholder
+  }
+];
+
 export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => {
   const [resumeText, setResumeText] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [fileName, setFileName] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [isRestored, setIsRestored] = useState(false);
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string>(AVATARS[1].id); // Default to Leo
 
   // Load from Local Storage on mount
   useEffect(() => {
     const savedResume = localStorage.getItem('interview_resume_text');
     const savedJob = localStorage.getItem('interview_job_desc');
     const savedFileName = localStorage.getItem('interview_file_name');
+    const savedAvatar = localStorage.getItem('interview_avatar_id');
 
     if (savedResume || savedJob) {
       if (savedResume) setResumeText(savedResume);
       if (savedJob) setJobDescription(savedJob);
       if (savedFileName) setFileName(savedFileName);
+      if (savedAvatar) setSelectedAvatarId(savedAvatar);
       setIsRestored(true);
       
       // Clear the "Restored" badge after 3 seconds
@@ -44,6 +68,10 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
   useEffect(() => {
     localStorage.setItem('interview_file_name', fileName);
   }, [fileName]);
+  
+  useEffect(() => {
+    localStorage.setItem('interview_avatar_id', selectedAvatarId);
+  }, [selectedAvatarId]);
 
   const clearStorage = () => {
     if (confirm("Are you sure you want to clear your saved resume and job details?")) {
@@ -51,9 +79,11 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
       localStorage.removeItem('interview_job_desc');
       localStorage.removeItem('interview_file_name');
       localStorage.removeItem('anam_persona_id');
+      localStorage.removeItem('interview_avatar_id');
       setResumeText('');
       setJobDescription('');
       setFileName('');
+      setSelectedAvatarId(AVATARS[1].id);
       setIsRestored(false);
     }
   };
@@ -87,7 +117,8 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
     onSubmit({
       resumeText,
       jobDescription,
-      candidateName: "Candidate" 
+      candidateName: "Candidate",
+      avatarId: selectedAvatarId
     });
   };
 
@@ -115,10 +146,41 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
         <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           Configure Your Interview
         </h2>
-        <p className="text-zinc-400 mt-2">Upload your resume (PDF/Image/Text) and the job details.</p>
+        <p className="text-zinc-400 mt-2">Upload your resume and select your interviewer.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        
+        {/* Avatar Selection */}
+        <div className="space-y-2">
+           <label className="block text-sm font-medium text-zinc-300">
+             Choose Interviewer
+           </label>
+           <div className="grid grid-cols-3 gap-4">
+              {AVATARS.map((avatar) => (
+                <button
+                  key={avatar.id}
+                  type="button"
+                  onClick={() => setSelectedAvatarId(avatar.id)}
+                  className={`relative p-2 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 group ${selectedAvatarId === avatar.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-600'}`}
+                >
+                  <div className={`w-16 h-16 rounded-full overflow-hidden bg-zinc-800 ${selectedAvatarId === avatar.id ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-black' : 'group-hover:ring-2 group-hover:ring-zinc-600'}`}>
+                    {/* Placeholder colored circles if images fail */}
+                    <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                        <UserCircle2 className="w-10 h-10 text-zinc-600" />
+                    </div>
+                  </div>
+                  <span className={`text-sm font-medium ${selectedAvatarId === avatar.id ? 'text-white' : 'text-zinc-400'}`}>
+                    {avatar.name}
+                  </span>
+                  {selectedAvatarId === avatar.id && (
+                    <div className="absolute top-2 right-2 w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  )}
+                </button>
+              ))}
+           </div>
+        </div>
+
         {/* Resume Section */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-zinc-300">

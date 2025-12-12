@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import { SetupForm } from './components/SetupForm';
 import { InterviewSession } from './components/InterviewSession';
-import { AppState, InterviewContext } from './types';
+import { AppState, InterviewContext, AnamPersonaConfig } from './types';
 import { analyzeContext } from './services/geminiService';
-import { getOrCreatePersona } from './services/anamService';
-import { Brain, Sparkles, MessageSquare, Loader2, CheckCircle2, Database } from 'lucide-react';
+import { Brain, Sparkles, Database, CheckCircle2, Loader2 } from 'lucide-react';
+
+// Maps to help select voice/name based on ID
+const AVATAR_MAP: Record<string, { name: string; voiceId: string }> = {
+  "30fa96d0-26c4-4e55-94a0-517025942e18": { name: "Cara", voiceId: "6bfbe25a-979d-40f3-a92b-5394170af54b" },
+  "121d5df1-3f3e-4a48-a237-8ff488e9eed8": { name: "Leo", voiceId: "b7274f87-8b72-4c5b-bf52-954768b28c75" },
+  "a49abb10-9a29-4099-b950-e68534742fb2": { name: "Maya", voiceId: "6bfbe25a-979d-40f3-a92b-5394170af54b" }
+};
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.SETUP);
   const [context, setContext] = useState<InterviewContext | null>(null);
-  const [systemInstruction, setSystemInstruction] = useState('');
   const [initialOpening, setInitialOpening] = useState('');
-  const [personaId, setPersonaId] = useState<string>('');
+  
+  // New: Store the full config to pass to the session
+  const [personaConfig, setPersonaConfig] = useState<AnamPersonaConfig | null>(null);
   
   // Loading States
-  const [loadingStep, setLoadingStep] = useState(0); // 0: Idle, 1: Analyzing, 2: Configuring Persona, 3: Done
+  const [loadingStep, setLoadingStep] = useState(0); // 0: Idle, 1: Analyzing, 2: Configuring, 3: Done
 
   const handleSetupSubmit = async (data: InterviewContext) => {
     setContext(data);
@@ -27,10 +34,14 @@ const App: React.FC = () => {
       
       setLoadingStep(2);
       
+      // Ensure we get the correct avatar details, default to Leo only if ID is totally missing/invalid
+      const selectedAvatarId = data.avatarId;
+      const avatarDetails = AVATAR_MAP[selectedAvatarId] || AVATAR_MAP["121d5df1-3f3e-4a48-a237-8ff488e9eed8"];
+
       const prompt = `
 # Personality
 
-You are Leo, a professional technical recruiter.
+You are ${avatarDetails.name}, a professional technical recruiter.
 You are inquisitive, fair, and professional, but also encouraging and warm.
 You have analyzed the candidate's resume and the job description to conduct a targeted interview.
 
@@ -58,24 +69,26 @@ Specific Topics to Cover:
 ${analysis.topics?.join(', ') || 'Experience, Skills, Cultural Fit'}
 
 Protocol:
-1. Start by welcoming the candidate and introducing yourself as Leo.
+1. Start by welcoming the candidate and introducing yourself as ${avatarDetails.name}.
 2. Ask questions about the topics listed above.
 3. Dig deeper if the answer is vague.
 4. If the candidate struggles, offer a small hint or move to the next topic.
       `;
 
-      setSystemInstruction(prompt);
-      setInitialOpening(analysis.openingLine || "Hello! I'm Leo. Shall we begin?");
+      const openingLine = analysis.openingLine || `Hello! I'm ${avatarDetails.name}. Shall we begin?`;
+      setInitialOpening(openingLine);
 
-      // 2. Setup Anam Persona
-      const id = await getOrCreatePersona({
-        name: "Leo",
+      // 2. Prepare Persona Config
+      const config: AnamPersonaConfig = {
+        name: avatarDetails.name,
+        avatarId: selectedAvatarId, 
+        voiceId: avatarDetails.voiceId,
         systemPrompt: prompt,
-        avatarId: "121d5df1-3f3e-4a48-a237-8ff488e9eed8",
-        voiceId: "b7274f87-8b72-4c5b-bf52-954768b28c75" 
-      });
+        llmId: "CUSTOMER_CLIENT_V1" // Using Client-side orchestration (Gemini)
+      };
       
-      setPersonaId(id);
+      console.log("Configuring Session for:", config.name);
+      setPersonaConfig(config);
       setLoadingStep(3);
       
       // Slight delay to let user see "Ready"
@@ -110,11 +123,10 @@ Protocol:
         
         <div className="z-10 w-full max-w-4xl mb-12 text-center">
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-4 bg-gradient-to-br from-white to-zinc-500 bg-clip-text text-transparent">
-              Hyperion Interviewer
+              Interviewer AI
             </h1>
             <p className="text-zinc-400 text-lg md:text-xl max-w-2xl mx-auto">
-              Practice your next technical interview with <span className="text-emerald-400 font-semibold">Leo</span>, 
-              an AI powered by Anam that sees, hears, and remembers context.
+              Practice your next technical interview with an AI avatar powered by Anam that sees, hears, and remembers context.
             </p>
         </div>
 
@@ -193,11 +205,10 @@ Protocol:
   }
 
   // Interview Screen
-  if (appState === AppState.INTERVIEW) {
+  if (appState === AppState.INTERVIEW && personaConfig) {
     return (
       <InterviewSession 
-        systemInstruction={systemInstruction} 
-        personaId={personaId}
+        personaConfig={personaConfig}
         onEnd={handleEndInterview}
         initialMessage={initialOpening}
       />
@@ -213,7 +224,7 @@ Protocol:
         <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-6" />
         <h2 className="text-3xl font-bold text-white mb-2">Interview Complete</h2>
         <p className="text-zinc-400 mb-8">
-          Great job practicing! Leo has logged your session notes. You can restart to practice a different scenario or refine your answers.
+          Great job practicing! {personaConfig?.name} has logged your session notes. You can restart to practice a different scenario or refine your answers.
         </p>
         <button 
           onClick={handleReset}

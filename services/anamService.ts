@@ -1,7 +1,9 @@
+import { AnamPersonaConfig } from '../types';
+
 // Service to interact with Anam AI API
 
 // Attempt to retrieve key from various environment variable patterns
-const getApiKey = () => {
+export const getApiKey = () => {
   // Check process.env if it exists
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.ANAM_API_KEY) return process.env.ANAM_API_KEY;
@@ -24,80 +26,42 @@ const getApiKey = () => {
 const ANAM_API_KEY = getApiKey();
 const API_BASE_URL = "https://api.anam.ai/v1";
 
-interface AnamPersonaConfig {
-  name: string;
-  description?: string;
-  systemPrompt: string;
-  avatarId?: string;
-  voiceId?: string;
-}
+export const createSessionToken = async (config: AnamPersonaConfig): Promise<string> => {
+  if (!ANAM_API_KEY) throw new Error("Missing API Key");
 
-export const getOrCreatePersona = async (config: AnamPersonaConfig): Promise<string> => {
-  if (!ANAM_API_KEY) {
-    throw new Error("Missing ANAM_API_KEY. Please ensure it is set in your .env file.");
+  // Validate required fields for inline configuration
+  if (!config.avatarId) throw new Error("Session Config Error: avatarId is missing");
+  if (!config.voiceId) throw new Error("Session Config Error: voiceId is missing");
+
+  // Construct payload adhering to new API standards for inline persona config
+  // We use inline config to support dynamic system prompts based on resume analysis
+  const body = {
+    personaConfig: {
+      name: config.name || "Interviewer",
+      avatarId: config.avatarId,
+      voiceId: config.voiceId,
+      llmId: config.llmId || "CUSTOMER_CLIENT_V1", // Use llmId instead of brainType
+      systemPrompt: config.systemPrompt || "You are a helpful interviewer."
+    }
+  };
+
+  console.log("Requesting Session Token with:", JSON.stringify(body, null, 2));
+
+  const response = await fetch(`${API_BASE_URL}/auth/session-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${ANAM_API_KEY}`
+    },
+    body: JSON.stringify(body) 
+  });
+
+  if (!response.ok) {
+     const text = await response.text();
+     console.error("Session token fetch failed:", text);
+     throw new Error(`Failed to get session token: ${text}`);
   }
 
-  try {
-    // 1. Check if we have a stored persona ID to update instead of creating new ones constantly
-    const storedPersonaId = localStorage.getItem('anam_persona_id');
-    
-    if (storedPersonaId) {
-      console.log("Updating existing persona:", storedPersonaId);
-      const updateResponse = await fetch(`${API_BASE_URL}/personas/${storedPersonaId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ANAM_API_KEY}`
-        },
-        body: JSON.stringify({
-          brain: {
-            systemPrompt: config.systemPrompt
-          }
-        })
-      });
-
-      if (updateResponse.ok) {
-        return storedPersonaId;
-      } else {
-        console.warn("Failed to update persona (404/400), creating new one.");
-        localStorage.removeItem('anam_persona_id');
-      }
-    }
-
-    // 2. Create new Persona
-    console.log("Creating new persona...");
-    
-    // API requires systemPrompt to be nested inside a 'brain' object
-    const body = {
-      name: config.name,
-      avatarId: config.avatarId || "121d5df1-3f3e-4a48-a237-8ff488e9eed8", 
-      voiceId: config.voiceId || "b7274f87-8b72-4c5b-bf52-954768b28c75",
-      llmId: "ANAM_LLAMA_v3_3_70B_V1", 
-      brain: {
-        systemPrompt: config.systemPrompt
-      }
-    };
-
-    const response = await fetch(`${API_BASE_URL}/personas`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ANAM_API_KEY}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anam API Error: ${errorText}`);
-    }
-
-    const data = await response.json();
-    localStorage.setItem('anam_persona_id', data.id);
-    return data.id;
-
-  } catch (error) {
-    console.error("Error in getOrCreatePersona:", error);
-    throw error;
-  }
+  const data = await response.json();
+  return data.sessionToken;
 };
