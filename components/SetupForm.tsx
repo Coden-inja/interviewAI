@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, FileText, Briefcase, ArrowRight, Loader2, FileType } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, Briefcase, ArrowRight, Loader2, FileType, Trash2, Database } from 'lucide-react';
 import { InterviewContext } from '../types';
 import { extractResumeText } from '../services/geminiService';
 
@@ -13,6 +13,50 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
   const [jobDescription, setJobDescription] = useState('');
   const [fileName, setFileName] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isRestored, setIsRestored] = useState(false);
+
+  // Load from Local Storage on mount
+  useEffect(() => {
+    const savedResume = localStorage.getItem('interview_resume_text');
+    const savedJob = localStorage.getItem('interview_job_desc');
+    const savedFileName = localStorage.getItem('interview_file_name');
+
+    if (savedResume || savedJob) {
+      if (savedResume) setResumeText(savedResume);
+      if (savedJob) setJobDescription(savedJob);
+      if (savedFileName) setFileName(savedFileName);
+      setIsRestored(true);
+      
+      // Clear the "Restored" badge after 3 seconds
+      setTimeout(() => setIsRestored(false), 3000);
+    }
+  }, []);
+
+  // Save to Local Storage whenever values change
+  useEffect(() => {
+    localStorage.setItem('interview_resume_text', resumeText);
+  }, [resumeText]);
+
+  useEffect(() => {
+    localStorage.setItem('interview_job_desc', jobDescription);
+  }, [jobDescription]);
+
+  useEffect(() => {
+    localStorage.setItem('interview_file_name', fileName);
+  }, [fileName]);
+
+  const clearStorage = () => {
+    if (confirm("Are you sure you want to clear your saved resume and job details?")) {
+      localStorage.removeItem('interview_resume_text');
+      localStorage.removeItem('interview_job_desc');
+      localStorage.removeItem('interview_file_name');
+      localStorage.removeItem('anam_persona_id');
+      setResumeText('');
+      setJobDescription('');
+      setFileName('');
+      setIsRestored(false);
+    }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -26,7 +70,6 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
       if (file.type === 'text/plain' || file.name.endsWith('.md') || file.name.endsWith('.txt')) {
         text = await file.text();
       } else {
-        // Use AI OCR for PDFs and Images
         text = await extractResumeText(file);
       }
       setResumeText(text);
@@ -44,12 +87,30 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
     onSubmit({
       resumeText,
       jobDescription,
-      candidateName: "Candidate" // Will be refined by AI
+      candidateName: "Candidate" 
     });
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl">
+    <div className="max-w-2xl mx-auto p-6 bg-zinc-900 rounded-2xl border border-zinc-800 shadow-2xl relative">
+      {/* Restore Indicator */}
+      {isRestored && (
+        <div className="absolute -top-12 left-0 right-0 flex justify-center animate-fade-in-down">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg backdrop-blur-md">
+            <Database className="w-4 h-4" />
+            Restored previous session data
+          </div>
+        </div>
+      )}
+
+      <button 
+        onClick={clearStorage}
+        className="absolute top-6 right-6 p-2 text-zinc-600 hover:text-red-400 transition-colors"
+        title="Clear saved data"
+      >
+        <Trash2 className="w-5 h-5" />
+      </button>
+
       <div className="mb-8 text-center">
         <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           Configure Your Interview
@@ -82,7 +143,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
                   <>
                     <FileType className="w-8 h-8 text-emerald-400 mb-2" />
                     <span className="text-emerald-300 font-medium">{fileName}</span>
-                    <span className="text-xs text-emerald-500/70 mt-1">Upload different file?</span>
+                    <span className="text-xs text-emerald-500/70 mt-1">Click to replace</span>
                   </>
                 ) : (
                   <>
@@ -97,7 +158,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
           <div className="text-center text-xs text-zinc-500 my-2">- OR -</div>
 
           <textarea 
-            className="w-full h-32 bg-zinc-950 border border-zinc-700 rounded-xl p-3 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none disabled:opacity-50"
+            className="w-full h-32 bg-zinc-950 border border-zinc-700 rounded-xl p-3 text-sm text-zinc-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none disabled:opacity-50 font-mono"
             placeholder={isExtracting ? "Extracting text from your file..." : "Paste your resume text here..."}
             value={resumeText}
             onChange={(e) => setResumeText(e.target.value)}
@@ -130,7 +191,7 @@ export const SetupForm: React.FC<SetupFormProps> = ({ onSubmit, isLoading }) => 
               : 'bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20'}`}
         >
           {isLoading ? (
-            <span className="animate-pulse">Analyzing Profile...</span>
+            <span className="animate-pulse">Starting Session...</span>
           ) : (
             <>
               <span>Start Interview</span>
